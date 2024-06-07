@@ -1,6 +1,6 @@
 # @version 0.3.9
 """
-@title YCRV Zap v3
+@title YCRV Zap v4
 @license GNU AGPLv3
 @author Yearn Finance
 @notice Zap into yCRV ecosystem positions in a single transaction
@@ -14,6 +14,11 @@ interface Vault:
     def deposit(amount: uint256, recipient: address = msg.sender) -> uint256: nonpayable
     def withdraw(shares: uint256) -> uint256: nonpayable
     def pricePerShare() -> uint256: view
+
+interface IYBS:
+    def stakeFor(account: address, amount: uint256) -> uint256: nonpayable
+    def unstakeFor(account: address, amount: uint256, receiver: address) -> uint256: nonpayable
+    def balanceOf(account: address) -> uint256: nonpayable
 
 interface IYCRV:
     def burn_to_mint(amount: uint256, recipient: address = msg.sender) -> uint256: nonpayable
@@ -48,19 +53,17 @@ POOL_V1: constant(address) =    0x453D92C7d4263201C69aACfaf589Ed14202d83a4 # OLD
 POOL_V2: constant(address) =    0x99f5aCc8EC2Da2BC0771c32814EFF52b712de1E5 # NEW POOL
 CVXCRV: constant(address) =     0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7 # CVXCRV
 CVXCRVPOOL: constant(address) = 0x9D0464996170c6B9e75eED71c68B99dDEDf279e8 # CVXCRVPOOL
+YBS: constant(address) =        0xE9A115b77A1057C918F997c32663FdcE24FB873f # YBS
 LEGACY_TOKENS: public(immutable(address[2]))
-OUTPUT_TOKENS: public(immutable(address[3]))
+OUTPUT_TOKENS: public(immutable(address[4]))
 
+name: public(String[32])
 sweep_recipient: public(address)
 mint_buffer: public(uint256)
 
 @external
-@view
-def name() -> String[32]:
-    return "YCRV Zap v3"
-
-@external
 def __init__():
+    self.name = "YCRV Zap v3"
     self.sweep_recipient = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52
     self.mint_buffer = 15
 
@@ -72,8 +75,10 @@ def __init__():
     assert ERC20(CRV).approve(YCRV, max_value(uint256))
     assert ERC20(CVXCRV).approve(CVXCRVPOOL, max_value(uint256))
 
+    assert ERC20(YCRV).approve(YBS, max_value(uint256))
+
     LEGACY_TOKENS = [YVECRV, YVBOOST]
-    OUTPUT_TOKENS = [YCRV, STYCRV, LPYCRV_V2]
+    OUTPUT_TOKENS = [YCRV, STYCRV, LPYCRV_V2, YBS]
 
 @external
 def zap(_input_token: address, _output_token: address, _amount_in: uint256 = max_value(uint256), _min_out: uint256 = 0, _recipient: address = msg.sender) -> uint256:
@@ -123,10 +128,13 @@ def zap(_input_token: address, _output_token: address, _amount_in: uint256 = max
         return amount
     else:
         assert _input_token in OUTPUT_TOKENS or _input_token == POOL_V2 # dev: invalid input token address
-        assert ERC20(_input_token).transferFrom(msg.sender, self, amount)
+        if _input_token != YBS:
+            assert ERC20(_input_token).transferFrom(msg.sender, self, amount)
 
     if _input_token == STYCRV:
         amount = Vault(STYCRV).withdraw(amount)
+    elif _input_token == YBS:
+        amount = IYBS(YBS).unstakeFor(msg.sender, amount, self)
     elif _input_token in [LPYCRV_V2, POOL_V2]:
         if _input_token == LPYCRV_V2:
             amount = Vault(LPYCRV_V2).withdraw(amount)
@@ -170,12 +178,17 @@ def _lp(_amounts: uint256[2]) -> uint256:
 @internal
 def _convert_to_output(_output_token: address, amount: uint256, _min_out: uint256, _recipient: address) -> uint256:
     # dev: output token and amount values have already been validated
+    amount_out: uint256 = 0
     if _output_token == STYCRV:
-        amount_out: uint256 = Vault(STYCRV).deposit(amount, _recipient)
+        amount_out = Vault(STYCRV).deposit(amount, _recipient)
         assert amount_out >= _min_out # dev: min out
         return amount_out
+    elif _output_token == YBS:
+        amount_out = IYBS(YBS).stakeFor(_recipient, amount)
+        assert amount_out + 1 >= _min_out # dev: min out
+        return amount_out
     assert _output_token == LPYCRV_V2
-    amount_out: uint256 = Vault(LPYCRV_V2).deposit(self._lp([0, amount]), _recipient)
+    amount_out = Vault(LPYCRV_V2).deposit(self._lp([0, amount]), _recipient)
     assert amount_out >= _min_out # dev: min out
     return amount_out
 
@@ -189,7 +202,7 @@ def _relative_price_from_legacy(_input_token: address, _output_token: address, _
     if _input_token == YVBOOST:
         amount = Vault(YVBOOST).pricePerShare() * amount / 10 ** 18
     
-    if _output_token == YCRV:
+    if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
         return amount * 10 ** 18 / Vault(STYCRV).pricePerShare()
@@ -214,7 +227,7 @@ def relative_price(_input_token: address, _output_token: address, _amount_in: ui
     assert _output_token in OUTPUT_TOKENS  # dev: invalid output token address
     if _input_token in LEGACY_TOKENS:
         return self._relative_price_from_legacy(_input_token, _output_token, _amount_in)
-    assert  (
+    assert (
         _input_token in [CRV , CVXCRV , LPYCRV_V1 , POOL_V1, POOL_V2]
         or _input_token in OUTPUT_TOKENS
     ) # dev: invalid input token address
@@ -236,7 +249,7 @@ def relative_price(_input_token: address, _output_token: address, _amount_in: ui
             amount = Vault(LPYCRV_V1).pricePerShare() * amount / 10 ** 18
         amount = Curve(POOL_V1).get_virtual_price() * amount / 10 ** 18
 
-    if _output_token == YCRV:
+    if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
         return amount * 10 ** 18 / Vault(STYCRV).pricePerShare()
@@ -254,7 +267,7 @@ def _calc_expected_out_from_legacy(_input_token: address, _output_token: address
     if _input_token == YVBOOST:
         amount = Vault(YVBOOST).pricePerShare() * amount / 10 ** 18
     
-    if _output_token == YCRV:
+    if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
         return amount * 10 ** 18 / Vault(STYCRV).pricePerShare()
@@ -309,7 +322,7 @@ def calc_expected_out(_input_token: address, _output_token: address, _amount_in:
             amount = Vault(LPYCRV_V2).pricePerShare() * amount / 10 ** 18
         amount = Curve(POOL_V2).calc_withdraw_one_coin(amount, 1)
 
-    if _output_token == YCRV:
+    if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
         return amount * 10 ** 18 / Vault(STYCRV).pricePerShare()
