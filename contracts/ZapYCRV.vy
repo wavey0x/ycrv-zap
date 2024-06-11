@@ -3,7 +3,7 @@
 @title YCRV Zap v4
 @license GNU AGPLv3
 @author Yearn Finance
-@notice Zap into yCRV ecosystem positions in a single transaction
+@notice Zap into yCRV ecosystem positions in a single transaction, including Yearn Boosted Staker
 @dev To use safely, supply a reasonable min_out value during your zap.
 """
 
@@ -52,7 +52,7 @@ LPYCRV_V2: constant(address) =  0x6E9455D109202b426169F0d8f01A3332DAE160f3 # LP-
 POOL_V1: constant(address) =    0x453D92C7d4263201C69aACfaf589Ed14202d83a4 # OLD POOL
 POOL_V2: constant(address) =    0x99f5aCc8EC2Da2BC0771c32814EFF52b712de1E5 # NEW POOL
 CVXCRV: constant(address) =     0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7 # CVXCRV
-CVXCRVPOOL: constant(address) = 0x9D0464996170c6B9e75eED71c68B99dDEDf279e8 # CVXCRVPOOL
+CVXCRVPOOL: constant(address) = 0x971add32ea87f10bd192671630be3be8a11b8623 # CVXCRVPOOLv2
 YBS: constant(address) =        0xE9A115b77A1057C918F997c32663FdcE24FB873f # YBS
 LEGACY_TOKENS: public(immutable(address[2]))
 OUTPUT_TOKENS: public(immutable(address[4]))
@@ -63,7 +63,7 @@ mint_buffer: public(uint256)
 
 @external
 def __init__():
-    self.name = "YCRV Zap v3"
+    self.name = "YCRV Zap v4"
     self.sweep_recipient = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52
     self.mint_buffer = 15
 
@@ -85,7 +85,7 @@ def zap(_input_token: address, _output_token: address, _amount_in: uint256 = max
     """
     @notice 
         This function allows users to zap from any legacy tokens, CRV, or any yCRV tokens as input 
-        into any yCRV token as output.
+        into any yCRV token as output, including Yearn Boosted Staker (YBS).
     @dev 
         When zapping between tokens that might incur slippage, it is recommended to supply a _min_out value > 0.
         You can estimate the expected output amount by making an off-chain call to this contract's 
@@ -185,6 +185,7 @@ def _convert_to_output(_output_token: address, amount: uint256, _min_out: uint25
         return amount_out
     elif _output_token == YBS:
         amount_out = IYBS(YBS).stakeFor(_recipient, amount)
+        # add 1 since YBS may lose precision due to rounding
         assert amount_out + 1 >= _min_out # dev: min out
         return amount_out
     assert _output_token == LPYCRV_V2
