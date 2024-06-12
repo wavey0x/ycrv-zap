@@ -51,8 +51,6 @@ LPYCRV_V1: constant(address) =  0xc97232527B62eFb0D8ed38CF3EA103A6CcA4037e # LP-
 LPYCRV_V2: constant(address) =  0x6E9455D109202b426169F0d8f01A3332DAE160f3 # LP-YCRV
 POOL_V1: constant(address) =    0x453D92C7d4263201C69aACfaf589Ed14202d83a4 # OLD POOL
 POOL_V2: constant(address) =    0x99f5aCc8EC2Da2BC0771c32814EFF52b712de1E5 # NEW POOL
-CVXCRV: constant(address) =     0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7 # CVXCRV
-CVXCRVPOOL: constant(address) = 0x971add32ea87f10bd192671630be3be8a11b8623 # CVXCRVPOOLv2
 YBS: constant(address) =        0xE9A115b77A1057C918F997c32663FdcE24FB873f # YBS
 LEGACY_TOKENS: public(immutable(address[2]))
 OUTPUT_TOKENS: public(immutable(address[4]))
@@ -73,8 +71,6 @@ def __init__():
     assert ERC20(POOL_V2).approve(LPYCRV_V2, max_value(uint256))
     assert ERC20(CRV).approve(POOL_V2, max_value(uint256))
     assert ERC20(CRV).approve(YCRV, max_value(uint256))
-    assert ERC20(CVXCRV).approve(CVXCRVPOOL, max_value(uint256))
-
     assert ERC20(YCRV).approve(YBS, max_value(uint256))
 
     LEGACY_TOKENS = [YVECRV, YVBOOST]
@@ -91,7 +87,7 @@ def zap(_input_token: address, _output_token: address, _amount_in: uint256 = max
         You can estimate the expected output amount by making an off-chain call to this contract's 
         "calc_expected_out" helper.
         Discount the result by some extra % to allow buffer, and set as _min_out.
-    @param _input_token Can be CRV, yveCRV, yvBOOST, cvxCRV or any yCRV token address that user wishes to migrate from
+    @param _input_token Can be CRV, yveCRV, yvBOOST, or any yCRV token address that user wishes to migrate from
     @param _output_token The yCRV token address that user wishes to migrate to
     @param _amount_in Amount of input token to migrate, defaults to full balance
     @param _min_out The minimum amount of output token to receive
@@ -108,10 +104,8 @@ def zap(_input_token: address, _output_token: address, _amount_in: uint256 = max
 
     if _input_token in LEGACY_TOKENS:
         return self._zap_from_legacy(_input_token, _output_token, amount, _min_out, _recipient)
-    elif _input_token == CRV or _input_token == CVXCRV:
+    elif _input_token == CRV:
         assert ERC20(_input_token).transferFrom(msg.sender, self, amount)
-        if _input_token == CVXCRV:
-            amount = Curve(CVXCRVPOOL).exchange(1, 0, amount, 0)
         amount = self._convert_crv(amount)
     elif _input_token in [LPYCRV_V1, POOL_V1]:
         # If this input token path is chosen, we assume it is a migration. 
@@ -229,7 +223,7 @@ def relative_price(_input_token: address, _output_token: address, _amount_in: ui
     if _input_token in LEGACY_TOKENS:
         return self._relative_price_from_legacy(_input_token, _output_token, _amount_in)
     assert (
-        _input_token in [CRV , CVXCRV , LPYCRV_V1 , POOL_V1, POOL_V2]
+        _input_token in [CRV, LPYCRV_V1, POOL_V1, POOL_V2]
         or _input_token in OUTPUT_TOKENS
     ) # dev: invalid input token address
 
@@ -296,9 +290,7 @@ def calc_expected_out(_input_token: address, _output_token: address, _amount_in:
         return self._calc_expected_out_from_legacy(_input_token, _output_token, _amount_in)
     amount: uint256 = _amount_in
 
-    if _input_token == CRV or _input_token == CVXCRV:
-        if _input_token == CVXCRV:
-            amount = Curve(CVXCRVPOOL).get_dy(1, 0, amount)
+    if _input_token == CRV:
         output_amount: uint256 = Curve(POOL_V2).get_dy(0, 1, amount)
         buffered_amount: uint256 = amount + (amount * self.mint_buffer / 10_000)
         if output_amount > buffered_amount: # dev: ensure calculation uses buffer
