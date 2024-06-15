@@ -36,11 +36,10 @@ def whale_yvboost(accounts):
     yield accounts.at("0xe896e539e557BC751860a7763C8dD589aF1698Ce", force=True)
 
 @pytest.fixture
-def user(accounts, yveCrv, yvboost, crv, whale_yvecrv, whale_crv, whale_yvboost, cvxcrv, whale_cvxcrv):
+def user(accounts, yveCrv, yvboost, crv, whale_yvecrv, whale_crv, whale_yvboost):
     yvboost.transfer(accounts[0], 500e18,{'from':whale_yvboost})
     crv.transfer(accounts[0], 500e18,{'from':whale_crv})
     yveCrv.transfer(accounts[0], 1_000e18,{'from':whale_yvecrv})
-    cvxcrv.transfer(accounts[0], 1_000e18,{'from':whale_cvxcrv})
     yield accounts[0]
 
 @pytest.fixture
@@ -84,14 +83,6 @@ def crv():
     yield Contract("0xD533a949740bb3306d119CC777fa900bA034cd52")
 
 @pytest.fixture
-def cvxcrv():
-    yield Contract("0x62B9c7356A2Dc64a1969e19C23e4f579F9810Aa7")
-
-@pytest.fixture
-def whale_cvxcrv(accounts):
-    yield accounts.at("0x3Fe65692bfCD0e6CF84cB1E7d24108E434A7587e", force=True)
-
-@pytest.fixture
 def amount(accounts, token, gov):
     amount = 10_000 * 10 ** token.decimals()
     # In order to get some funds for the token you are about to use,
@@ -133,8 +124,8 @@ def live_strat():
 @pytest.fixture
 def ycrv(user):
     ycrv = Contract('0xFCc5c47bE19d06BF83eB04298b026F81069ff65b')
-    v = '0x27B5739e22ad9033bcBf192059122d163b60349D'
-    ycrv.transfer(user, 10_000e18, {'from': v})
+    whale = '0x71E47a4429d35827e0312AA13162197C23287546'
+    ycrv.transfer(user, 10_000e18, {'from': whale})
     yield ycrv
 
 @pytest.fixture

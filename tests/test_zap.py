@@ -2,7 +2,7 @@ import math, time, brownie
 from brownie import Contract
 import time
 
-def test_zap(zap, pool, strategist, lp_ycrv, amount, user, crv3, cvxcrv, whale_cvxcrv, chain, whale_crv, whale_3crv, gov, st_ycrv, ycrv, yvboost, yveCrv, crv, ybs):
+def test_zap(zap, pool, strategist, lp_ycrv, amount, user, crv3, chain, whale_crv, whale_3crv, gov, st_ycrv, ycrv, yvboost, yveCrv, crv, ybs):
     yveCrv.approve(ycrv, 2**256-1, {'from':user})
     # ycrv = Contract.from_explorer('0xFCc5c47bE19d06BF83eB04298b026F81069ff65b')
     ycrv.burn_to_mint(yveCrv.balanceOf(user)/2, {'from':user})
@@ -12,7 +12,6 @@ def test_zap(zap, pool, strategist, lp_ycrv, amount, user, crv3, cvxcrv, whale_c
     yveCrv.approve(zap, 2**256-1, {"from": user})
     lp_ycrv.approve(zap, 2**256-1, {"from": user})
     st_ycrv.approve(zap, 2**256-1, {"from": user})
-    cvxcrv.approve(zap, 2**256-1, {"from": user})
     ycrv.approve(zap, 2**256-1, {"from": user})
     ybs.setApprovedCaller(zap, 3, {"from": user})
     chain.snapshot()
@@ -37,7 +36,6 @@ def test_zap(zap, pool, strategist, lp_ycrv, amount, user, crv3, cvxcrv, whale_c
     
     input_tokens = legacy_tokens + output_tokens
     input_tokens.append(crv.address)
-    input_tokens.append(cvxcrv.address)
 
     # Test some calls
     amount = 10e18
@@ -54,7 +52,7 @@ def test_zap(zap, pool, strategist, lp_ycrv, amount, user, crv3, cvxcrv, whale_c
             min = r * 0.99
             actual = 0
             actual = zap.zap(i, o, amount, min, {'from': user}).return_value
-            assert_balances(zap, pool, strategist, lp_ycrv, amount, user, crv3, cvxcrv, whale_cvxcrv, chain, whale_crv, whale_3crv, gov, st_ycrv, ycrv, yvboost, yveCrv, crv)
+            assert_balances(zap, pool, strategist, lp_ycrv, amount, user, crv3, chain, whale_crv, whale_3crv, gov, st_ycrv, ycrv, yvboost, yveCrv, crv)
             print_results(True,i, o, amount, r, s, actual)    
 
 def print_results(is_legacy, i, o, a, r, s, actual):
@@ -83,12 +81,11 @@ def print_user_balances(user, yvLP, crv, yvboost, yveCrv, pool):
     print("yvLP:", yvLP.balanceOf(user)/1e18)
     print("----------\n")
 
-def assert_balances(zap, pool, strategist, lp_ycrv, amount, user, crv3, cvxcrv, whale_cvxcrv, chain, whale_crv, whale_3crv, gov, st_ycrv, ycrv, yvboost, yveCrv, crv):
+def assert_balances(zap, pool, strategist, lp_ycrv, amount, user, crv3, chain, whale_crv, whale_3crv, gov, st_ycrv, ycrv, yvboost, yveCrv, crv):
     assert ycrv.balanceOf(zap) < 10
     assert crv.balanceOf(zap) == 0
     assert yvboost.balanceOf(zap) == 0
     assert yveCrv.balanceOf(zap) == 0
     assert lp_ycrv.balanceOf(zap) == 0
     assert st_ycrv.balanceOf(zap) == 0
-    assert cvxcrv.balanceOf(zap) == 0
     assert pool.balanceOf(zap) == 0
