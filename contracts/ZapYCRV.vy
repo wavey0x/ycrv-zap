@@ -208,7 +208,7 @@ def _zap_from_legacy(
 @internal
 def _convert_crv(amount: uint256) -> uint256:
     output_amount: uint256 = Curve(POOL_V2).get_dy(0, 1, amount)
-    buffered_amount: uint256 = amount + (amount * self.mint_buffer / 10000)
+    buffered_amount: uint256 = amount + (amount * self.mint_buffer / 10_000)
     if output_amount > buffered_amount:
         return Curve(POOL_V2).exchange(0, 1, amount, 0)
     else:
@@ -364,7 +364,7 @@ def calc_expected_out(
 
     if _input_token == CRV:
         output_amount: uint256 = Curve(POOL_V2).get_dy(0, 1, amount)
-        buffered_amount: uint256 = amount + (amount * self.mint_buffer / 10000)
+        buffered_amount: uint256 = amount + (amount * self.mint_buffer / 10_000)
         if (
             output_amount > buffered_amount
         ):  # dev: ensure calculation uses buffer
