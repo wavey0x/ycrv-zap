@@ -1,4 +1,4 @@
-# @version 0.3.9
+# @version 0.3.10
 
 """
 @title YCRV Zap v4
@@ -18,6 +18,11 @@ interface Vault:
     ) -> uint256: nonpayable
     def withdraw(shares: uint256) -> uint256: nonpayable
     def pricePerShare() -> uint256: view
+    def totalSupply() -> uint256: view
+    def totalAssets() -> uint256: view
+    def lastReport() -> uint256: view
+    def lockedProfit() -> uint256: view
+    def lockedProfitDegradation() -> uint256: view
 
 
 interface IYBS:
@@ -254,10 +259,10 @@ def _relative_price_from_legacy(
     if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
-        return amount * 10**18 / Vault(STYCRV).pricePerShare()
+        return self.amount_to_shares(Vault(STYCRV), amount)
     assert _output_token == LPYCRV_V2
     lp_amount: uint256 = amount * 10**18 / Curve(POOL_V2).get_virtual_price()
-    return lp_amount * 10**18 / Vault(LPYCRV_V2).pricePerShare()
+    return self.amount_to_shares(Vault(LPYCRV_V2), lp_amount)
 
 
 @view
@@ -292,25 +297,25 @@ def relative_price(
     if _input_token == _output_token:
         return _amount_in
     elif _input_token == STYCRV:
-        amount = Vault(STYCRV).pricePerShare() * amount / 10**18
+        amount = self.shares_to_amount(Vault(STYCRV), amount)
     elif _input_token in [LPYCRV_V2, POOL_V2]:
         if _input_token == LPYCRV_V2:
-            amount = Vault(LPYCRV_V2).pricePerShare() * amount / 10**18
+            amount = self.shares_to_amount(Vault(LPYCRV_V2), amount)
         amount = Curve(POOL_V2).get_virtual_price() * amount / 10**18
     elif _input_token in [LPYCRV_V1, POOL_V1]:
         assert _output_token == LPYCRV_V2
         if _input_token == LPYCRV_V1:
-            amount = Vault(LPYCRV_V1).pricePerShare() * amount / 10**18
+            amount = self.shares_to_amount(Vault(LPYCRV_V1), amount)
         amount = Curve(POOL_V1).get_virtual_price() * amount / 10**18
 
     if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
-        return amount * 10**18 / Vault(STYCRV).pricePerShare()
+        return self.amount_to_shares(Vault(STYCRV), amount)
 
     assert _output_token == LPYCRV_V2
     lp_amount: uint256 = amount * 10**18 / Curve(POOL_V2).get_virtual_price()
-    return lp_amount * 10**18 / Vault(LPYCRV_V2).pricePerShare()
+    return self.amount_to_shares(Vault(LPYCRV_V2), lp_amount)
 
 
 @view
@@ -327,10 +332,10 @@ def _calc_expected_out_from_legacy(
     if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
-        return amount * 10**18 / Vault(STYCRV).pricePerShare()
+        return self.amount_to_shares(Vault(STYCRV), amount)
     assert _output_token == LPYCRV_V2
     lp_amount: uint256 = Curve(POOL_V2).calc_token_amount([0, amount], True)
-    return lp_amount * 10**18 / Vault(LPYCRV_V2).pricePerShare()
+    return self.amount_to_shares(Vault(LPYCRV_V2), lp_amount)
 
 
 @view
@@ -367,10 +372,10 @@ def calc_expected_out(
     elif _input_token in [LPYCRV_V1, POOL_V1]:
         assert _output_token == LPYCRV_V2
         if _input_token == LPYCRV_V1:
-            amount = Vault(LPYCRV_V1).pricePerShare() * amount / 10**18
+            amount = self.shares_to_amount(Vault(LPYCRV_V1), amount)
         amounts: uint256[2] = self.assets_amounts_from_lp(POOL_V1, amount)
         amount = Curve(POOL_V2).calc_token_amount(amounts, True)  # Deposit
-        return amount * 10**18 / Vault(LPYCRV_V2).pricePerShare()
+        return self.amount_to_shares(Vault(LPYCRV_V2), amount)
     else:
         assert (
             _input_token in OUTPUT_TOKENS or _input_token == POOL_V2
@@ -380,20 +385,20 @@ def calc_expected_out(
         return 0
 
     if _input_token == STYCRV:
-        amount = Vault(STYCRV).pricePerShare() * amount / 10**18
+        amount = self.amount_to_shares(Vault(STYCRV), amount)
     elif _input_token in [LPYCRV_V2, POOL_V2]:
         if _input_token == LPYCRV_V2:
-            amount = Vault(LPYCRV_V2).pricePerShare() * amount / 10**18
+            amount = self.shares_to_amount(Vault(LPYCRV_V2), amount)
         amount = Curve(POOL_V2).calc_withdraw_one_coin(amount, 1)
 
     if _output_token in [YCRV, YBS]:
         return amount
     elif _output_token == STYCRV:
-        return amount * 10**18 / Vault(STYCRV).pricePerShare()
+        return self.amount_to_shares(Vault(STYCRV), amount)
 
     assert _output_token == LPYCRV_V2
     lp_amount: uint256 = Curve(POOL_V2).calc_token_amount([0, amount], True)
-    return lp_amount * 10**18 / Vault(LPYCRV_V2).pricePerShare()
+    return self.amount_to_shares(Vault(LPYCRV_V2), lp_amount)
 
 
 @view
@@ -405,6 +410,42 @@ def assets_amounts_from_lp(pool: address, _lp_amount: uint256) -> uint256[2]:
     balance1: uint256 = Curve(pool).balances(1) * ratio / 10**18
     return [balance0, balance1]
 
+
+@view
+@internal
+def amount_to_shares(vault: Vault, amount: uint256) -> uint256:
+    supply: uint256 = vault.totalSupply()
+    if supply > 0:
+        return amount * supply / self.get_free_funds(vault)
+    return amount
+
+
+@view
+@internal
+def shares_to_amount(vault: Vault, shares: uint256) -> uint256:
+    supply: uint256 = vault.totalSupply()
+    if supply > 0:
+        return shares * self.get_free_funds(vault) / supply
+    return 0
+
+@view
+@internal
+def get_free_funds(vault: Vault) -> uint256:
+    return vault.totalAssets() - self.calculate_locked_profit(vault)
+
+@view
+@internal
+def calculate_locked_profit(vault: Vault) -> uint256:
+    ratio: uint256 = (
+        block.timestamp - 
+        vault.lastReport()
+    ) * vault.lockedProfitDegradation()
+
+    if ratio < 10 ** 18:
+        locked_profit: uint256 = vault.lockedProfit()
+        return locked_profit - (ratio * locked_profit / 10 ** 18)
+    else:
+        return 0
 
 @external
 def sweep(_token: address, _amount: uint256 = max_value(uint256)):
