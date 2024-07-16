@@ -71,10 +71,7 @@ def test_zap(
             s = zap.relative_price(i, o, amount)
             min = r * 0.99
             actual = 0
-            before = interface.IERC20(o).balanceOf(user)
-            zap.zap(i, o, amount, min, {"from": user})
-            after = interface.IERC20(o).balanceOf(user)
-            actual = after - before
+            actual = zap.zap(i, o, amount, min, {"from": user}).return_value
             assert_balances(
                 zap,
                 pool,
