@@ -39,6 +39,12 @@ def test_zap(
     print("ZAP CRV --> LP VAULT\n")
     print_user_balances(user, lp_ycrv, crv, yvboost, yveCrv, pool)
 
+    # sleep to avoid PPS rising
+    sleep_to_avoid = True
+    if sleep_to_avoid:
+        chain.sleep(86400 * 4)
+        print("😴 Sleep to realize all lp-yCRV and yvyCRV locked profit\n")
+
     legacy_tokens = []
     output_tokens = []
     try:
@@ -110,6 +116,11 @@ def print_results(is_legacy, i, o, a, r, s, actual):
     print(f"EXP AMT OUT {r/1e18}")
     if actual is not None:
         print(f"ACTUAL AMT OUT {actual/1e18}")
+        diff = r - actual
+        if diff == 0:
+            print("✅  Diff is zero")
+        else:
+            print(f"🚨 DIFF B/W EXP & ACTUAL {diff/1e18}")
     print("---")
 
 

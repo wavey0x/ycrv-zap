@@ -1,4 +1,4 @@
-# @version 0.3.10
+# @version 0.3.9
 
 """
 @title YCRV Zap v4
@@ -385,7 +385,7 @@ def calc_expected_out(
         return 0
 
     if _input_token == STYCRV:
-        amount = self.amount_to_shares(Vault(STYCRV), amount)
+        amount = self.shares_to_amount(Vault(STYCRV), amount)
     elif _input_token in [LPYCRV_V2, POOL_V2]:
         if _input_token == LPYCRV_V2:
             amount = self.shares_to_amount(Vault(LPYCRV_V2), amount)
@@ -428,24 +428,26 @@ def shares_to_amount(vault: Vault, shares: uint256) -> uint256:
         return shares * self.get_free_funds(vault) / supply
     return 0
 
+
 @view
 @internal
 def get_free_funds(vault: Vault) -> uint256:
     return vault.totalAssets() - self.calculate_locked_profit(vault)
 
+
 @view
 @internal
 def calculate_locked_profit(vault: Vault) -> uint256:
     ratio: uint256 = (
-        block.timestamp - 
-        vault.lastReport()
+        block.timestamp - vault.lastReport()
     ) * vault.lockedProfitDegradation()
 
-    if ratio < 10 ** 18:
+    if ratio < 10**18:
         locked_profit: uint256 = vault.lockedProfit()
-        return locked_profit - (ratio * locked_profit / 10 ** 18)
+        return locked_profit - (ratio * locked_profit / 10**18)
     else:
         return 0
+
 
 @external
 def sweep(_token: address, _amount: uint256 = max_value(uint256)):
